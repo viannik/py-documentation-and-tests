@@ -1,6 +1,7 @@
 from datetime import datetime
 
 from django.db.models import F, Count
+from drf_spectacular.utils import extend_schema, OpenApiParameter
 from rest_framework import viewsets, mixins, status
 from rest_framework.authentication import TokenAuthentication
 from rest_framework.decorators import action
@@ -77,6 +78,31 @@ class MovieViewSet(
         """Converts a list of string IDs to a list of integers"""
         return [int(str_id) for str_id in qs.split(",")]
 
+    @extend_schema(
+        parameters=[
+            OpenApiParameter(
+                name="title",
+                type=str,
+                description="Filter by movie title (case insensitive, partial match)",
+                required=False,
+            ),
+            OpenApiParameter(
+                name="genres",
+                type={"type": "list", "items": {"type": "number"}},
+                description="Filter by genres IDs (comma separated)",
+                required=False,
+            ),
+            OpenApiParameter(
+                name="actors",
+                type={"type": "list", "items": {"type": "number"}},
+                description="Filter by actors IDs (comma separated)",
+                required=False,
+            ),
+        ],
+    )
+    def list(self, request, *args, **kwargs):
+        return super().list(request, *args, **kwargs)
+
     def get_queryset(self):
         """Retrieve the movies with filters"""
         title = self.request.query_params.get("title")
@@ -142,6 +168,25 @@ class MovieSessionViewSet(viewsets.ModelViewSet):
     serializer_class = MovieSessionSerializer
     authentication_classes = (TokenAuthentication,)
     permission_classes = (IsAdminOrIfAuthenticatedReadOnly,)
+
+    @extend_schema(
+        parameters=[
+            OpenApiParameter(
+                name="date",
+                type=str,
+                description="Filter by show date (YYYY-MM-DD)",
+                required=False,
+            ),
+            OpenApiParameter(
+                name="movie",
+                type=int,
+                description="Filter by movie ID",
+                required=False,
+            ),
+        ],
+    )
+    def list(self, request, *args, **kwargs):
+        return super().list(request, *args, **kwargs)
 
     def get_queryset(self):
         date = self.request.query_params.get("date")
