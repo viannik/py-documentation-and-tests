@@ -82,7 +82,8 @@ class MovieViewSet(
             OpenApiParameter(
                 name="title",
                 type=str,
-                description="Filter by movie title (case insensitive, partial match)",
+                description="Filter by movie title "
+                            "(case insensitive, partial match)",
                 required=False,
             ),
             OpenApiParameter(
