@@ -256,6 +256,67 @@ class AuthenticatedMovieTests(TestCase):
         self.assertIn(serializer_with_comedy_2.data, res.data)
         self.assertNotIn(serializer_without_comedy.data, res.data)
 
+    def test_filter_by_title(self):
+        movie1 = sample_movie(title="A Test Movie")
+        movie2 = sample_movie(title="Another test movie")
+        movie3 = sample_movie(title="Different One")
+
+        res = self.client.get(MOVIE_URL, {"title": "test"})
+        serializer1 = MovieListSerializer(movie1)
+        serializer2 = MovieListSerializer(movie2)
+        serializer3 = MovieListSerializer(movie3)
+
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertIn(serializer1.data, res.data)
+        self.assertIn(serializer2.data, res.data)
+        self.assertNotIn(serializer3.data, res.data)
+
+    def test_filter_by_actors(self):
+        actor1 = sample_actor(first_name="Actor", last_name="One")
+        actor2 = sample_actor(first_name="Actor", last_name="Two")
+
+        movie1 = sample_movie(title="Movie with Actor One")
+        movie1.actors.add(actor1)
+
+        movie2 = sample_movie(title="Movie with Actor Two")
+        movie2.actors.add(actor2)
+
+        movie3 = sample_movie(title="Movie with Both Actors")
+        movie3.actors.add(actor1, actor2)
+
+        res = self.client.get(MOVIE_URL, {"actors": f"{actor1.id},{actor2.id}"})
+        serializer1 = MovieListSerializer(movie1)
+        serializer2 = MovieListSerializer(movie2)
+        serializer3 = MovieListSerializer(movie3)
+
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertIn(serializer1.data, res.data)
+        self.assertIn(serializer2.data, res.data)
+        self.assertIn(serializer3.data, res.data)
+
+    def test_filter_multiple(self):
+        actor1 = sample_actor(first_name="Famous", last_name="Actor")
+        actor2 = sample_actor(first_name="Another", last_name="Person")
+
+        movie1 = sample_movie(title="Action Movie")
+        movie1.actors.add(actor1)
+
+        movie2 = sample_movie(title="Action Comedy")
+        movie2.actors.add(actor2)
+
+        movie3 = sample_movie(title="Just a Movie")
+        movie3.actors.add(actor1)
+
+        res = self.client.get(MOVIE_URL, {"title": "action", "actors": f"{actor1.id}"})
+        serializer1 = MovieListSerializer(movie1)
+        serializer2 = MovieListSerializer(movie2)
+        serializer3 = MovieListSerializer(movie3)
+
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertIn(serializer1.data, res.data)
+        self.assertNotIn(serializer2.data, res.data)
+        self.assertNotIn(serializer3.data, res.data)
+
     def test_non_admin_cannot_create_movie(self):
         payload = {
             "title": "New Movie",
@@ -265,6 +326,26 @@ class AuthenticatedMovieTests(TestCase):
         res = self.client.post(MOVIE_URL, payload)
         self.assertEqual(res.status_code, status.HTTP_403_FORBIDDEN)
 
+    def test_non_admin_cannot_update_movie(self):
+        movie = sample_movie()
+        payload = {"title": "Updated Title"}
+        url = detail_url(movie.id)
+
+        # Test PUT
+        res_put = self.client.put(url, payload)
+        self.assertEqual(res_put.status_code, status.HTTP_403_FORBIDDEN)
+
+        # Test PATCH
+        res_patch = self.client.patch(url, payload)
+        self.assertEqual(res_patch.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_non_admin_cannot_delete_movie(self):
+        movie = sample_movie()
+        url = detail_url(movie.id)
+        res = self.client.delete(url)
+        self.assertEqual(res.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertTrue(Movie.objects.filter(id=movie.id).exists())
+
 
 class AdminMovieTests(TestCase):
     def setUp(self):
@@ -273,11 +354,11 @@ class AdminMovieTests(TestCase):
             "admin@test.com", "adminpass123"
         )
         self.client.force_authenticate(self.admin_user)
-
-    def test_admin_can_create_movie(self):
+        self.movie = sample_movie()
         self.genre = sample_genre()
         self.actor = sample_actor()
 
+    def test_admin_can_create_movie(self):
         payload = {
             "title": "Admin Movie",
             "description": "Created by admin",
@@ -291,3 +372,43 @@ class AdminMovieTests(TestCase):
 
         self.assertEqual(res.status_code, status.HTTP_201_CREATED)
         self.assertEqual(res.data, serializer.data)
+
+    def test_admin_can_update_movie(self):
+        """Test admin can PUT a movie."""
+        url = detail_url(self.movie.id)
+        new_genre = sample_genre(name="Sci-Fi")
+        new_actor = sample_actor(first_name="New", last_name="Actor")
+        payload = {
+            "title": "Updated Movie",
+            "description": "Updated Description",
+            "duration": 130,
+            "genres": [new_genre.id],
+            "actors": [new_actor.id],
+        }
+        res = self.client.put(url, payload)
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+
+        self.movie.refresh_from_db()
+        movie = Movie.objects.get(id=self.movie.id)
+        serializer = MovieSerializer(movie)
+
+        self.assertEqual(res.data, serializer.data)
+        self.assertIn(new_genre, self.movie.genres.all())
+        self.assertIn(new_actor, self.movie.actors.all())
+
+    def test_admin_can_partial_update_movie(self):
+        """Test admin can PATCH a movie."""
+        url = detail_url(self.movie.id)
+        payload = {"title": "Partially Updated"}
+        res = self.client.patch(url, payload)
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.movie.refresh_from_db()
+        self.assertEqual(self.movie.title, payload["title"])
+
+    def test_admin_can_delete_movie(self):
+        """Test admin can delete a movie."""
+        movie = sample_movie()
+        url = detail_url(movie.id)
+        res = self.client.delete(url)
+        self.assertEqual(res.status_code, status.HTTP_204_NO_CONTENT)
+        self.assertFalse(Movie.objects.filter(id=movie.id).exists())
