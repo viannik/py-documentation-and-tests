@@ -168,28 +168,6 @@ class MovieImageUploadTests(TestCase):
         self.assertIn("movie_image", res.data[0].keys())
 
 
-def sample_genre(**params):
-    defaults = {"name": "Drama"}
-    defaults.update(params)
-    return Genre.objects.create(**defaults)
-
-
-def sample_actor(**params):
-    defaults = {"first_name": "John", "last_name": "Doe"}
-    defaults.update(params)
-    return Actor.objects.create(**defaults)
-
-
-def sample_movie(**params):
-    defaults = {
-        "title": "Sample movie",
-        "description": "Sample description",
-        "duration": 90,
-    }
-    defaults.update(params)
-    return Movie.objects.create(**defaults)
-
-
 class UnauthenticatedMovieTests(TestCase):
     def setUp(self):
         self.client = APIClient()
